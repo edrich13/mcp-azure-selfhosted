@@ -1,6 +1,6 @@
 # MCP Azure DevOps Self-Hosted Server
 
-MCP server for self-hosted (and cloud) Azure DevOps instances with Personal Access Token authentication. Provides **25 tools** covering all Azure DevOps Work Item Tracking operations.
+MCP server for self-hosted (and cloud) Azure DevOps instances with Personal Access Token authentication. Provides **39 tools** covering Azure DevOps Work Item Tracking, Git, Test Plans, delivery plans, attachments, and productivity workflows.
 
 ## Features
 
@@ -14,6 +14,11 @@ MCP server for self-hosted (and cloud) Azure DevOps instances with Personal Acce
 - **Metadata Discovery** — Work item types, fields, area paths, iteration/sprint paths
 - **History & Audit** — Full change history and revision snapshots
 - **Release Notes** — Auto-generate formatted release notes from sprints/iterations
+- **Git & Repos** — Read file contents and search code across repositories
+- **Test Plans** — List plans/suites, create test cases, record results, and file bugs from failures
+- **Delivery Plans** — Inspect cross-team roadmaps and timelines
+- **Attachments** — Attach and retrieve mockups, screenshots, and documents
+- **Productivity** — Bulk-create work items, decompose a PRD into a Feature→Stories→Tasks hierarchy, detect duplicate bugs, and list "my work"
 
 ## Quick Start
 
@@ -206,6 +211,53 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 |------|-------------|
 | `azure_get_sprint_work_items` | Get all work items in a sprint/iteration |
 | `azure_generate_release_notes` | Generate formatted markdown release notes |
+
+### Git & Repos (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `azure_get_file_content` | Get the raw content of a file from a Git repository (optional branch) |
+| `azure_search_code` | Search code across a project (requires the Code Search extension) |
+
+### Developer Productivity (1 tool)
+
+| Tool | Description |
+|------|-------------|
+| `azure_get_my_work_items` | Get work items currently assigned to you (excludes Closed/Done by default) |
+
+### Product & Program Management (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `azure_bulk_create_work_items` | Create multiple work items in one call (e.g., import a backlog/PRD) |
+| `azure_get_delivery_plan` | List delivery plans, or get a plan's delivery timeline |
+| `azure_generate_prd_to_stories` | Create a Feature → User Stories → Tasks hierarchy from a structured breakdown |
+
+### Attachments (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `azure_add_attachment` | Attach a file (mockup/screenshot/doc) to a work item from a local path or inline content |
+| `azure_get_attachments` | List a work item's attachments and optionally download them |
+
+### Test Plans / QA (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `azure_list_test_plans` | List all test plans in a project |
+| `azure_get_test_plan` | Get details of a specific test plan |
+| `azure_list_test_suites` | List all test suites within a test plan |
+| `azure_create_test_case` | Create a Test Case with ordered steps; optionally add to a suite |
+| `azure_add_test_result` | Record a pass/fail result for a test case (creates & completes a run) |
+| `azure_create_bug_from_test_failure` | Auto-file a Bug from a failed test with repro details, linked to the test case |
+
+### Duplicate Detection (1 tool)
+
+| Tool | Description |
+|------|-------------|
+| `azure_duplicate_detection` | Find likely-duplicate work items by title similarity before creating a new one |
+
+> **Note:** `azure_search_code` requires the Code Search extension on the organization/collection, and the Test Plans tools require Test Plans licensing.
 
 ## Examples
 

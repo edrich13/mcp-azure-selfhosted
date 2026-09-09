@@ -8,8 +8,10 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { AzureDevOpsClient } from './azure-client.js';
-import { WorkItemCreateInput, WorkItemUpdateInput } from './types.js';
+import { WorkItemCreateInput, WorkItemUpdateInput, PrdDecompositionInput, TestStep } from './types.js';
 import { generateReleaseNotes, ReleaseNotesOptions } from './release-notes.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ─── Environment Configuration ─────────────────────────────────────────────
 
@@ -576,6 +578,370 @@ const tools: Tool[] = [
       },
     },
   },
+
+  // ── Git & Repos ────────────────────────────────────────────────────────
+  {
+    name: 'azure_get_file_content',
+    description:
+      'Get the raw content of a file from a Git repository in Azure DevOps. Provide the repository name/ID and the file path. Optionally specify a branch (defaults to the repo default branch).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repository: {
+          type: 'string',
+          description: 'Repository name or ID',
+        },
+        path: {
+          type: 'string',
+          description: 'File path within the repo (e.g., "/src/index.ts" or "src/index.ts")',
+        },
+        project: {
+          type: 'string',
+          description: 'Project name (uses default if not provided)',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name (e.g., "main"). Defaults to the repository default branch.',
+        },
+      },
+      required: ['repository', 'path'],
+    },
+  },
+  {
+    name: 'azure_search_code',
+    description:
+      'Search code across repositories in a project using Azure DevOps Code Search. Requires the Code Search extension to be installed on the organization/collection. Returns matching files with paths and repositories.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        searchText: {
+          type: 'string',
+          description: 'Text or code to search for (supports code search filters like func:, class:)',
+        },
+        project: {
+          type: 'string',
+          description: 'Project name to scope the search (uses default if not provided)',
+        },
+        top: {
+          type: 'number',
+          description: 'Maximum number of results (default: 25)',
+        },
+        repository: {
+          type: 'string',
+          description: 'Optional repository name to restrict the search',
+        },
+      },
+      required: ['searchText'],
+    },
+  },
+
+  // ── Cross-cutting Dev Insight ──────────────────────────────────────────
+  {
+    name: 'azure_get_my_work_items',
+    description:
+      "Get work items currently assigned to the authenticated user (the PAT owner). Excludes Closed/Removed/Done by default. Answers \"what's assigned to me right now\".",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project name to scope (uses default if not provided)',
+        },
+        types: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional filter by work item types (e.g., ["Bug", "Task"])',
+        },
+        includeClosed: {
+          type: 'boolean',
+          description: 'Include Closed/Removed/Done items (default: false)',
+        },
+      },
+    },
+  },
+
+  // ── Product / Program Management ───────────────────────────────────────
+  {
+    name: 'azure_bulk_create_work_items',
+    description:
+      'Create multiple work items in one call (e.g., importing a batch from a PRD or backlog list). Each item is created independently; partial failures are reported without aborting the rest.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'Array of work items to create',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', description: 'Work item type (Bug, User Story, Task, Feature, Epic, ...)' },
+              title: { type: 'string', description: 'Title' },
+              description: { type: 'string', description: 'Description (HTML supported)' },
+              assignedTo: { type: 'string', description: 'Display name or email' },
+              areaPath: { type: 'string', description: 'Area path' },
+              iterationPath: { type: 'string', description: 'Iteration/sprint path' },
+              priority: { type: 'number', description: 'Priority 1-4' },
+              severity: { type: 'string', description: 'Severity for bugs' },
+              tags: { type: 'string', description: 'Semicolon-separated tags' },
+              storyPoints: { type: 'number', description: 'Story points' },
+              effort: { type: 'number', description: 'Effort estimate' },
+              acceptanceCriteria: { type: 'string', description: 'Acceptance criteria' },
+              reproSteps: { type: 'string', description: 'Repro steps for bugs' },
+              customFields: { type: 'object', additionalProperties: true, description: 'Custom fields map' },
+            },
+            required: ['type', 'title'],
+          },
+        },
+        project: {
+          type: 'string',
+          description: 'Default project for items that do not specify their own (uses env default if not provided)',
+        },
+      },
+      required: ['items'],
+    },
+  },
+  {
+    name: 'azure_get_delivery_plan',
+    description:
+      'Get cross-team delivery plans (roadmap/timeline). Without a planId, lists all delivery plans in the project. With a planId, returns that plan\'s delivery timeline.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'Optional delivery plan ID. If omitted, lists all plans.',
+        },
+        project: {
+          type: 'string',
+          description: 'Project name (uses default if not provided)',
+        },
+      },
+    },
+  },
+  {
+    name: 'azure_generate_prd_to_stories',
+    description:
+      'Decompose a feature/PRD into a work item hierarchy and create it: a parent Feature, its child User Stories, and each story\'s child Tasks — all linked with parent-child relationships. Provide the structured breakdown (the agent produces this from a PRD). Returns the created hierarchy with IDs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        featureTitle: { type: 'string', description: 'Title of the parent feature' },
+        featureDescription: { type: 'string', description: 'Feature description (HTML supported)' },
+        featureType: { type: 'string', description: 'Parent work item type (default: "Feature")' },
+        storyType: { type: 'string', description: 'Story work item type (default: "User Story")' },
+        taskType: { type: 'string', description: 'Task work item type (default: "Task")' },
+        areaPath: { type: 'string', description: 'Area path applied to all created items' },
+        iterationPath: { type: 'string', description: 'Iteration path applied to all created items' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+        stories: {
+          type: 'array',
+          description: 'Child user stories, each optionally containing tasks',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Story title' },
+              description: { type: 'string', description: 'Story description' },
+              acceptanceCriteria: { type: 'string', description: 'Acceptance criteria' },
+              storyPoints: { type: 'number', description: 'Story points' },
+              assignedTo: { type: 'string', description: 'Assignee' },
+              tags: { type: 'string', description: 'Semicolon-separated tags' },
+              tasks: {
+                type: 'array',
+                description: 'Child tasks for this story',
+                items: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: 'Task title' },
+                    description: { type: 'string', description: 'Task description' },
+                    assignedTo: { type: 'string', description: 'Assignee' },
+                    effort: { type: 'number', description: 'Effort estimate' },
+                  },
+                  required: ['title'],
+                },
+              },
+            },
+            required: ['title'],
+          },
+        },
+      },
+      required: ['featureTitle', 'stories'],
+    },
+  },
+
+  // ── Design / Attachments ───────────────────────────────────────────────
+  {
+    name: 'azure_add_attachment',
+    description:
+      'Attach a file (mockup, screenshot, document) to a work item. Provide either a local filePath to read from disk, or inline content (optionally base64-encoded for binary files).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workItemId: { type: 'number', description: 'Work item ID to attach to' },
+        fileName: { type: 'string', description: 'File name to store (e.g., "mockup.png")' },
+        filePath: {
+          type: 'string',
+          description: 'Absolute local path to a file to upload (preferred for images/binaries)',
+        },
+        content: {
+          type: 'string',
+          description: 'Inline file content (used if filePath is not provided)',
+        },
+        contentBase64: {
+          type: 'boolean',
+          description: 'Set true if "content" is base64-encoded binary data',
+        },
+        comment: { type: 'string', description: 'Optional comment for the attachment link' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['workItemId', 'fileName'],
+    },
+  },
+  {
+    name: 'azure_get_attachments',
+    description:
+      'List the attachments (design assets, screenshots, docs) referenced on a work item. Returns names and download URLs. Optionally downloads them to a local directory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workItemId: { type: 'number', description: 'Work item ID' },
+        downloadDir: {
+          type: 'string',
+          description: 'Optional absolute directory path to download the attachments into',
+        },
+      },
+      required: ['workItemId'],
+    },
+  },
+
+  // ── QA / Test ──────────────────────────────────────────────────────────
+  {
+    name: 'azure_list_test_plans',
+    description: 'List all test plans in a project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+    },
+  },
+  {
+    name: 'azure_get_test_plan',
+    description: 'Get details of a specific test plan by ID.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: { type: 'number', description: 'Test plan ID' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['planId'],
+    },
+  },
+  {
+    name: 'azure_list_test_suites',
+    description: 'List all test suites within a test plan.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: { type: 'number', description: 'Test plan ID' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['planId'],
+    },
+  },
+  {
+    name: 'azure_create_test_case',
+    description:
+      'Create a Test Case work item with ordered test steps (action + expected result). Optionally add it to a test plan suite.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Test case title' },
+        steps: {
+          type: 'array',
+          description: 'Ordered test steps',
+          items: {
+            type: 'object',
+            properties: {
+              action: { type: 'string', description: 'Action to perform' },
+              expected: { type: 'string', description: 'Expected result (makes it a validation step)' },
+            },
+            required: ['action'],
+          },
+        },
+        priority: { type: 'number', description: 'Priority 1-4' },
+        areaPath: { type: 'string', description: 'Area path' },
+        iterationPath: { type: 'string', description: 'Iteration path' },
+        planId: { type: 'number', description: 'Optional test plan ID to add the case to (requires suiteId)' },
+        suiteId: { type: 'number', description: 'Optional suite ID to add the case to (requires planId)' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['title', 'steps'],
+    },
+  },
+  {
+    name: 'azure_add_test_result',
+    description:
+      'Record a pass/fail result for a test case. Creates an ad-hoc test run, adds the outcome, and completes the run. Outcome must be one of: Passed, Failed, Blocked, NotApplicable, NotExecuted.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        testCaseId: { type: 'number', description: 'Test case work item ID' },
+        outcome: {
+          type: 'string',
+          description: 'Result outcome: Passed, Failed, Blocked, NotApplicable, NotExecuted',
+        },
+        planId: { type: 'number', description: 'Optional test plan ID to associate the run with' },
+        comment: { type: 'string', description: 'Optional comment / failure notes' },
+        runName: { type: 'string', description: 'Optional name for the test run' },
+        testCaseTitle: { type: 'string', description: 'Optional test case title for the result' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['testCaseId', 'outcome'],
+    },
+  },
+  {
+    name: 'azure_create_bug_from_test_failure',
+    description:
+      'Auto-file a Bug from a failed test, building repro steps from the error message, stack trace, and steps. Optionally links the bug to the failing test case.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Bug title' },
+        testCaseId: { type: 'number', description: 'Optional failing test case ID to link' },
+        errorMessage: { type: 'string', description: 'Error/assertion message' },
+        stackTrace: { type: 'string', description: 'Stack trace' },
+        steps: { type: 'string', description: 'Steps that led to the failure (HTML supported)' },
+        assignedTo: { type: 'string', description: 'Assignee' },
+        priority: { type: 'number', description: 'Priority 1-4' },
+        severity: { type: 'string', description: 'Severity (e.g., "2 - High")' },
+        areaPath: { type: 'string', description: 'Area path' },
+        iterationPath: { type: 'string', description: 'Iteration path' },
+        tags: { type: 'string', description: 'Semicolon-separated tags' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'azure_duplicate_detection',
+    description:
+      'Find likely-duplicate work items (bugs by default) before creating a new one. Matches on title keywords and ranks candidates by similarity score (0-1). Excludes closed items by default.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Title/summary of the new item to check for duplicates' },
+        types: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Work item types to search (default: ["Bug"])',
+        },
+        top: { type: 'number', description: 'Max candidates to return (default: 5)' },
+        includeClosed: { type: 'boolean', description: 'Include closed/resolved items (default: false)' },
+        project: { type: 'string', description: 'Project name (uses default if not provided)' },
+      },
+      required: ['title'],
+    },
+  },
 ];
 
 // ─── Server Instance ─────────────────────────────────────────────────────────
@@ -942,6 +1308,314 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const notes = await generateReleaseNotes(getClient(), options);
         return {
           content: [{ type: 'text', text: notes }],
+        };
+      }
+
+      // ── Git & Repos ───────────────────────────────────────────────────
+
+      case 'azure_get_file_content': {
+        const content = await getClient().getFileContent(
+          args.repository as string,
+          args.path as string,
+          args.project as string | undefined,
+          args.branch as string | undefined
+        );
+        return {
+          content: [{ type: 'text', text: content }],
+        };
+      }
+
+      case 'azure_search_code': {
+        const results = await getClient().searchCode(
+          args.searchText as string,
+          args.project as string | undefined,
+          args.top as number | undefined,
+          args.repository as string | undefined
+        );
+        return {
+          content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+        };
+      }
+
+      // ── Cross-cutting Dev Insight ─────────────────────────────────────
+
+      case 'azure_get_my_work_items': {
+        const items = await getClient().getMyWorkItems(
+          args.project as string | undefined,
+          args.types as string[] | undefined,
+          args.includeClosed as boolean | undefined
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${items.length} work items assigned to you\n\n${JSON.stringify(items, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      // ── Product / Program Management ──────────────────────────────────
+
+      case 'azure_bulk_create_work_items': {
+        const rawItems = (args.items as any[]) || [];
+        const defaultProject = args.project as string | undefined;
+        const items: WorkItemCreateInput[] = rawItems.map((it) => ({
+          project: (it.project as string) || (defaultProject as string),
+          type: it.type as string,
+          title: it.title as string,
+          description: it.description,
+          assignedTo: it.assignedTo,
+          areaPath: it.areaPath,
+          iterationPath: it.iterationPath,
+          priority: it.priority,
+          severity: it.severity,
+          tags: it.tags,
+          storyPoints: it.storyPoints,
+          effort: it.effort,
+          acceptanceCriteria: it.acceptanceCriteria,
+          reproSteps: it.reproSteps,
+          customFields: it.customFields,
+        }));
+        const result = await getClient().bulkCreateWorkItems(items);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Created ${result.created.length} work item(s); ${result.errors.length} failed.\n\n${JSON.stringify(result, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_get_delivery_plan': {
+        const planId = args.planId as string | undefined;
+        const project = args.project as string | undefined;
+        if (planId) {
+          const timeline = await getClient().getDeliveryPlanTimeline(planId, project);
+          return {
+            content: [{ type: 'text', text: JSON.stringify(timeline, null, 2) }],
+          };
+        }
+        const plans = await getClient().getDeliveryPlans(project);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${plans.length} delivery plan(s)\n\n${JSON.stringify(plans, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_generate_prd_to_stories': {
+        const input: PrdDecompositionInput = {
+          project: args.project as string | undefined,
+          featureTitle: args.featureTitle as string,
+          featureDescription: args.featureDescription as string | undefined,
+          featureType: args.featureType as string | undefined,
+          storyType: args.storyType as string | undefined,
+          taskType: args.taskType as string | undefined,
+          areaPath: args.areaPath as string | undefined,
+          iterationPath: args.iterationPath as string | undefined,
+          stories: (args.stories as any[]) || [],
+        };
+        const hierarchy = await getClient().createHierarchyFromPrd(input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Created feature #${hierarchy.feature.id} with ${hierarchy.stories.length} stor(ies).\n\n${JSON.stringify(hierarchy, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      // ── Design / Attachments ──────────────────────────────────────────
+
+      case 'azure_add_attachment': {
+        const fileName = args.fileName as string;
+        const filePath = args.filePath as string | undefined;
+        let buffer: Buffer;
+        if (filePath) {
+          buffer = fs.readFileSync(filePath);
+        } else if (args.content !== undefined) {
+          buffer = args.contentBase64
+            ? Buffer.from(args.content as string, 'base64')
+            : Buffer.from(args.content as string, 'utf8');
+        } else {
+          throw new Error('Provide either "filePath" or "content" to attach.');
+        }
+        const item = await getClient().addAttachment(
+          args.workItemId as number,
+          fileName,
+          buffer,
+          args.project as string | undefined,
+          args.comment as string | undefined
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Attached "${fileName}" to work item #${item.id}.`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_get_attachments': {
+        const attachments = await getClient().getAttachments(args.workItemId as number);
+        const downloadDir = args.downloadDir as string | undefined;
+        const downloaded: string[] = [];
+        if (downloadDir && attachments.length > 0) {
+          fs.mkdirSync(downloadDir, { recursive: true });
+          for (const att of attachments) {
+            const data = await getClient().downloadAttachment(att.url);
+            const target = path.join(downloadDir, att.name || att.resourceId || 'attachment');
+            fs.writeFileSync(target, data);
+            downloaded.push(target);
+          }
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `Found ${attachments.length} attachment(s)` +
+                (downloaded.length ? `; downloaded ${downloaded.length} to ${downloadDir}` : '') +
+                `\n\n${JSON.stringify({ attachments, downloaded }, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      // ── QA / Test ─────────────────────────────────────────────────────
+
+      case 'azure_list_test_plans': {
+        const plans = await getClient().getTestPlans(args.project as string | undefined);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${plans.length} test plan(s)\n\n${JSON.stringify(plans, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_get_test_plan': {
+        const plan = await getClient().getTestPlan(
+          args.planId as number,
+          args.project as string | undefined
+        );
+        return {
+          content: [{ type: 'text', text: JSON.stringify(plan, null, 2) }],
+        };
+      }
+
+      case 'azure_list_test_suites': {
+        const suites = await getClient().getTestSuites(
+          args.planId as number,
+          args.project as string | undefined
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${suites.length} test suite(s)\n\n${JSON.stringify(suites, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_create_test_case': {
+        const testCase = await getClient().createTestCase(
+          args.title as string,
+          (args.steps as TestStep[]) || [],
+          args.project as string | undefined,
+          {
+            areaPath: args.areaPath as string | undefined,
+            iterationPath: args.iterationPath as string | undefined,
+            priority: args.priority as number | undefined,
+            planId: args.planId as number | undefined,
+            suiteId: args.suiteId as number | undefined,
+          }
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Created Test Case #${testCase.id}\n\n${JSON.stringify(testCase, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_add_test_result': {
+        const result = await getClient().addTestResult(
+          args.testCaseId as number,
+          args.outcome as string,
+          args.project as string | undefined,
+          {
+            planId: args.planId as number | undefined,
+            comment: args.comment as string | undefined,
+            runName: args.runName as string | undefined,
+            testCaseTitle: args.testCaseTitle as string | undefined,
+          }
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Recorded "${args.outcome}" for test case #${args.testCaseId}\n\n${JSON.stringify(result, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_create_bug_from_test_failure': {
+        const bug = await getClient().createBugFromTestFailure({
+          title: args.title as string,
+          project: args.project as string | undefined,
+          testCaseId: args.testCaseId as number | undefined,
+          errorMessage: args.errorMessage as string | undefined,
+          stackTrace: args.stackTrace as string | undefined,
+          steps: args.steps as string | undefined,
+          assignedTo: args.assignedTo as string | undefined,
+          priority: args.priority as number | undefined,
+          severity: args.severity as string | undefined,
+          areaPath: args.areaPath as string | undefined,
+          iterationPath: args.iterationPath as string | undefined,
+          tags: args.tags as string | undefined,
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Filed Bug #${bug.id} from test failure\n\n${JSON.stringify(bug, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case 'azure_duplicate_detection': {
+        const candidates = await getClient().findDuplicates(
+          args.title as string,
+          args.project as string | undefined,
+          args.types as string[] | undefined,
+          args.top as number | undefined,
+          args.includeClosed as boolean | undefined
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                candidates.length === 0
+                  ? 'No likely duplicates found.'
+                  : `Found ${candidates.length} possible duplicate(s)\n\n${JSON.stringify(candidates, null, 2)}`,
+            },
+          ],
         };
       }
 

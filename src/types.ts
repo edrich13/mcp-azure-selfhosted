@@ -279,3 +279,127 @@ export interface ListResponse<T> {
   count: number;
   value: T[];
 }
+
+// ─── Git ─────────────────────────────────────────────────────────────────────
+
+export interface GitRepository {
+  id: string;
+  name: string;
+  url: string;
+  project?: { id: string; name: string };
+  defaultBranch?: string;
+  size?: number;
+  remoteUrl?: string;
+  webUrl?: string;
+}
+
+export interface CodeSearchResult {
+  count: number;
+  results: Array<{
+    fileName: string;
+    path: string;
+    repository: { name: string; id: string };
+    project: { name: string; id: string };
+    versions?: Array<{ branchName: string; changeId: string }>;
+    matches?: Record<string, Array<{ charOffset: number; length: number }>>;
+  }>;
+}
+
+// ─── Delivery Plans ──────────────────────────────────────────────────────────
+
+export interface DeliveryPlan {
+  id: string;
+  name: string;
+  description?: string;
+  type?: string;
+  createdByIdentity?: IdentityRef;
+  modifiedDate?: string;
+  url?: string;
+}
+
+// ─── Attachments ─────────────────────────────────────────────────────────────
+
+export interface AttachmentReference {
+  id: string;
+  url: string;
+}
+
+export interface WorkItemAttachment {
+  name?: string;
+  url: string;
+  resourceId?: string;
+  comment?: string;
+}
+
+// ─── Test Plans / Suites / Runs ──────────────────────────────────────────────
+
+export interface TestPlan {
+  id: number;
+  name: string;
+  areaPath?: string;
+  iteration?: string;
+  state?: string;
+  owner?: IdentityRef;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface TestSuite {
+  id: number;
+  name: string;
+  suiteType?: string;
+  parentSuite?: { id: number; name: string };
+  plan?: { id: number; name: string };
+}
+
+export interface TestStep {
+  action: string;
+  expected?: string;
+}
+
+export interface TestRunResult {
+  run: any;
+  results: any;
+}
+
+// ─── PRD Decomposition ───────────────────────────────────────────────────────
+
+export interface PrdTaskInput {
+  title: string;
+  description?: string;
+  assignedTo?: string;
+  effort?: number;
+}
+
+export interface PrdStoryInput {
+  title: string;
+  description?: string;
+  acceptanceCriteria?: string;
+  storyPoints?: number;
+  assignedTo?: string;
+  tags?: string;
+  tasks?: PrdTaskInput[];
+}
+
+export interface PrdDecompositionInput {
+  project?: string;
+  featureTitle: string;
+  featureDescription?: string;
+  featureType?: string;
+  storyType?: string;
+  taskType?: string;
+  areaPath?: string;
+  iterationPath?: string;
+  stories: PrdStoryInput[];
+}
+
+// ─── Duplicate Detection ─────────────────────────────────────────────────────
+
+export interface DuplicateCandidate {
+  id: number;
+  title: string;
+  state?: string;
+  type?: string;
+  assignedTo?: string;
+  score: number;
+}
