@@ -4,6 +4,7 @@
   "description": "MCP server for self-hosted Azure DevOps instance with Personal Access Token authentication",
   "type": "module",
   "main": "build/index.js",
+  "types": "build/index.d.ts",
   "bin": {
     "mcp-azure-selfhosted": "build/index.js"
   },
@@ -11,6 +12,7 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
     "dev": "tsx src/index.ts"
   },
   "keywords": [
@@ -24,6 +26,20 @@
   ],
   "author": "edrich13",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edrich13/mcp-azure-selfhosted.git"
+  },
+  "bugs": {
+    "url": "https://github.com/edrich13/mcp-azure-selfhosted/issues"
+  },
+  "homepage": "https://github.com/edrich13/mcp-azure-selfhosted#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "axios": "^1.7.9"

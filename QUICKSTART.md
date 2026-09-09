@@ -7,28 +7,7 @@ Get up and running in 5 minutes.
 - **Node.js** 18+ installed
 - **Azure DevOps** account with a **Personal Access Token** (PAT)
 
-## 2. Install & Build
-
-```bash
-cd mcp-azure-selfhosted
-npm install
-npm run build
-```
-
-## 3. Configure
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-```
-AZURE_DEVOPS_ORG_URL=https://dev.azure.com/your-org
-AZURE_DEVOPS_PAT=your-token-here
-AZURE_DEVOPS_PROJECT=MyProject
-```
-
-## 4. Add to VS Code
+## 2. Add to VS Code
 
 Create `.vscode/mcp.json` in your workspace:
 
@@ -36,8 +15,8 @@ Create `.vscode/mcp.json` in your workspace:
 {
   "servers": {
     "azure-devops": {
-      "command": "node",
-      "args": ["/full/path/to/mcp-azure-selfhosted/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "mcp-azure-selfhosted"],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-org",
         "AZURE_DEVOPS_PAT": "your-pat-here",
@@ -48,7 +27,7 @@ Create `.vscode/mcp.json` in your workspace:
 }
 ```
 
-## 5. Use It
+## 3. Use It
 
 Open GitHub Copilot Chat and try:
 
@@ -57,9 +36,20 @@ Open GitHub Copilot Chat and try:
 - *"Show me all active bugs assigned to me"* → calls `azure_query_work_items`
 - *"Generate release notes for Sprint 23"* → calls `azure_generate_release_notes`
 
+## 4. Optional: Local Development
+
+```bash
+git clone https://github.com/edrich13/mcp-azure-selfhosted.git
+cd mcp-azure-selfhosted
+npm install
+npm run build
+node build/index.js
+```
+
 ## PAT Scopes Needed
 
 When creating your Personal Access Token, enable:
+
 - **Work Items** → Read & Write
 - **Project and Team** → Read
 

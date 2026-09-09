@@ -1,9 +1,10 @@
 {
   "servers": {
     "azure-devops": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/Users/username/mcp-azure-selfhosted/build/index.js"
+        "-y",
+        "mcp-azure-selfhosted"
       ],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-organization",

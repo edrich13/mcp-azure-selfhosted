@@ -17,6 +17,34 @@ MCP server for self-hosted (and cloud) Azure DevOps instances with Personal Acce
 
 ## Quick Start
 
+### End Users (npx, no clone required)
+
+Use the published npm package directly in your MCP config:
+
+```json
+{
+  "servers": {
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "mcp-azure-selfhosted"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-org",
+        "AZURE_DEVOPS_PAT": "your-pat-here",
+        "AZURE_DEVOPS_PROJECT": "MyProject"
+      }
+    }
+  }
+}
+```
+
+You can pin a version for deterministic installs by changing args to:
+
+```json
+["-y", "mcp-azure-selfhosted@1.0.0"]
+```
+
+### Local Development (clone and build)
+
 ```bash
 # 1. Install dependencies
 cd mcp-azure-selfhosted
@@ -76,8 +104,8 @@ Add to your `.vscode/mcp.json` or VS Code settings:
 {
   "servers": {
     "azure-devops": {
-      "command": "node",
-      "args": ["/path/to/mcp-azure-selfhosted/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "mcp-azure-selfhosted"],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-org",
         "AZURE_DEVOPS_PAT": "your-pat-here",
@@ -97,8 +125,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "azure-devops": {
-      "command": "node",
-      "args": ["/path/to/mcp-azure-selfhosted/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "mcp-azure-selfhosted"],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-org",
         "AZURE_DEVOPS_PAT": "your-pat-here",
@@ -234,6 +262,22 @@ npm run watch
 # Dev mode (tsx, direct TS execution)
 npm run dev
 ```
+
+## Publishing to npm (Maintainers)
+
+```bash
+# 1. Ensure package version is updated in package.json
+npm version patch
+
+# 2. Push commit and tag
+git push origin main --follow-tags
+```
+
+Publishing is automated via GitHub Actions on tags matching `v*`.
+
+Required repository secret:
+
+- `NPM_TOKEN` (npm automation token with publish access)
 
 ## License
 
